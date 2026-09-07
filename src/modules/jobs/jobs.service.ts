@@ -15,6 +15,7 @@ import { ScheduleInterviewDto } from './dto/schedule-interview.dto';
 import { FillJobDto } from './dto/fill-job.dto';
 import { SearchJobsDto } from './dto/search-jobs.dto';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AdminAuditService } from '../Admin/admin.service';
 
 @Injectable()
 export class JobsService {
@@ -22,6 +23,7 @@ export class JobsService {
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
     private readonly notificationsService: NotificationsService,
+    private readonly auditService: AdminAuditService,
   ) {}
 
   async publishJob(employerId: string, jobData: CreateJobDto) {
@@ -65,10 +67,25 @@ export class JobsService {
     if (job.employer.userId !== userId) throw new ForbiddenException('You can only edit your own jobs');
     if (job.status === JobStatus.CLOSED) throw new BadRequestException('Cannot edit a closed job');
 
-    return this.prisma.job.update({
+    const updatedJob = await this.prisma.job.update({
       where: { id: jobId },
       data: dto,
     });
+
+    // --- ADDED AUDIT LOG ---
+    await this.auditService.logAction(
+      userId,               // The employer's user ID performing the action
+      'JOB_UPDATED',        // Action type
+      'JOB',                // Entity
+      jobId,                // Entity ID
+      { 
+        previousStatus: job.status, 
+        newStatus: updatedJob.status,
+        updatedFields: Object.keys(dto)
+      } // Passing details as JSON
+    );
+
+    return updatedJob;
   }
 
   async closeJob(jobId: string, userId: string) {
@@ -80,10 +97,21 @@ export class JobsService {
     if (!job) throw new NotFoundException('Job not found');
     if (job.employer.userId !== userId) throw new ForbiddenException('You can only close your own jobs');
 
-    return this.prisma.job.update({
+    const updatedJob = await this.prisma.job.update({
       where: { id: jobId },
       data: { status: JobStatus.CLOSED },
     });
+
+    // --- ADDED AUDIT LOG ---
+    await this.auditService.logAction(
+      userId, 
+      'JOB_CLOSED', 
+      'JOB', 
+      jobId, 
+      { previousStatus: job.status, newStatus: JobStatus.CLOSED } 
+    );
+
+    return updatedJob;
   }
 
   async getEmployerJobs(userId: string) {
@@ -244,6 +272,53 @@ export class JobsService {
     return { message: 'Interview scheduled successfully', interview };
   }
 
+  async getTalentInterviews(userId: string) {
+    const interviews = await this.prisma.interview.findMany({
+      where: {
+        application: {
+          talentProfile: { userId },
+        },
+      },
+      include: {
+        application: {
+          select: {
+            id: true,
+            status: true,
+            appliedAt: true,
+            job: {
+              select: {
+                id: true,
+                title: true,
+                location: true,
+                jobType: true,
+                employer: {
+                  select: {
+                    companyName: true,
+                    logoUrl: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { scheduledAt: 'asc' }, // Shows upcoming interviews first
+    });
+
+    if (interviews.length === 0) {
+      return {
+        message: 'You have no scheduled interviews at the moment.',
+        data: [],
+      };
+    }
+
+    return {
+      message: 'Interviews retrieved successfully.',
+      count: interviews.length,
+      data: interviews,
+    };
+  }
+
   async getEmployerInterviews(userId: string) {
   return this.prisma.interview.findMany({
     where: {
@@ -391,10 +466,26 @@ export class JobsService {
       });
     }
 
-    return this.prisma.job.update({
+    // Capture the updated job so it can be returned after logging
+    const updatedJob = await this.prisma.job.update({
       where: { id: jobId },
       data: { status: 'FILLED' },
     });
+
+    // --- ADDED AUDIT LOG ---
+    await this.auditService.logAction(
+      userId, 
+      'JOB_FILLED', 
+      'JOB', 
+      jobId, 
+      { 
+        previousStatus: job.status, 
+        newStatus: 'FILLED',
+        hiredApplicationId: dto.applicationId || null
+      }
+    );
+
+    return updatedJob;
   }
 
   async getAdminFilledJobs() {

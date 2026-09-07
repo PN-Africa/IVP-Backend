@@ -203,6 +203,15 @@ export class JobsController {
     return this.jobsService.updateInterview(interviewId, employerId, 'RESCHEDULE', dto);
   }
 
+  @Get('talent/interviews')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.TALENT) 
+  @ApiOperation({ summary: 'Get all scheduled interviews for the authenticated talent' })
+  @ApiOkResponse({ description: 'List of interviews retrieved successfully.' })
+  getTalentInterviews(@GetUser('id') userId: string) {
+    return this.jobsService.getTalentInterviews(userId);
+  }
+
   @Patch('interviews/:interviewId/cancel')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.EMPLOYER)

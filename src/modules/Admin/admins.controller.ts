@@ -26,6 +26,7 @@ import {
   CreateAnnouncementDto,
   UpdateAnnouncementStatusDto,
 } from './dto/admin-content.dto';
+import { GetUser } from '../auth/decorators/get-user.decorator';
 
 @Controller('admin')
 export class AdminController {
@@ -134,11 +135,16 @@ export class AdminEmployerController {
   // Rules 2, 3, 4, 5: Approve or reject requests with optional reason
   @Patch(':id/verify')
   async verifyEmployer(
-    @Param('id') id: string, 
-    @Body() verifyDto: VerifyEmployerDto 
+    @Req() req,
+    @Param('id') employerId: string,
+    @Param('id') id: string,
+    @Body() verifyDto: VerifyEmployerDto
   ) {
+
+    const adminId = req.user.sub;
     return this.adminEmployerService.updateVerificationStatus(
       id, 
+      employerId,
       verifyDto.status, 
       verifyDto.rejectionReason
     );
@@ -165,10 +171,11 @@ export class AdminJobController {
   // Rule 4, 5, 6: Update status (PUBLISHED, HIDDEN, CLOSED, etc.)
   @Patch(':id/status')
   async updateJobStatus(
-    @Param('id') id: string,
-    @Body() updateJobStatusDto: UpdateJobStatusDto,
+    @GetUser('id') adminId: string, 
+    @Param('id') id: string, 
+    @Body() updateJobStatusDto: UpdateJobStatusDto 
   ) {
-    return this.adminJobService.updateJobStatus(id, updateJobStatusDto);
+    return this.adminJobService.updateJobStatus(adminId, id, updateJobStatusDto);
   }
 
   // Rule 5: Delete inappropriate job posting

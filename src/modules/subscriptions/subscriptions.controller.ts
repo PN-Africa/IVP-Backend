@@ -19,14 +19,14 @@ import { GetUser } from '../auth/decorators/get-user.decorator';
 import { Role } from '@prisma/client';
 
 @ApiTags('Subscriptions')
-@ApiBearerAuth() // Tells Swagger all endpoints here require a JWT token
+@ApiBearerAuth()
 @Controller('subscriptions')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class SubscriptionsController {
   constructor(private readonly subscriptionsService: SubscriptionsService) {}
 
   // ----------------------------------------------------
-  // ADMIN ROUTES (Rules 11 & 12)
+  // ADMIN ROUTES
   // ----------------------------------------------------
 
   @Post('admin/plans')
@@ -35,8 +35,11 @@ export class SubscriptionsController {
   @ApiCreatedResponse({ description: 'Subscription plan created successfully.' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid JWT token.' })
   @ApiForbiddenResponse({ description: 'User is not an Admin.' })
-  createPlan(@Body() dto: CreatePlanDto) {
-    return this.subscriptionsService.createPlan(dto);
+  createPlan(
+    @GetUser('id') adminId: string,
+    @Body() dto: CreatePlanDto,
+  ) {
+    return this.subscriptionsService.createPlan(adminId, dto);
   }
 
   @Patch('admin/plans/:id')
@@ -45,8 +48,12 @@ export class SubscriptionsController {
   @ApiParam({ name: 'id', description: 'The UUID of the plan to update' })
   @ApiOkResponse({ description: 'Subscription plan updated successfully.' })
   @ApiForbiddenResponse({ description: 'User is not an Admin.' })
-  updatePlan(@Param('id') id: string, @Body() dto: Partial<CreatePlanDto>) {
-    return this.subscriptionsService.updatePlan(id, dto);
+  updatePlan(
+    @GetUser('id') adminId: string,
+    @Param('id') id: string, 
+    @Body() dto: Partial<CreatePlanDto>,
+  ) {
+    return this.subscriptionsService.updatePlan(adminId, id, dto);
   }
 
   @Patch('admin/plans/:id/status')
@@ -56,8 +63,12 @@ export class SubscriptionsController {
   @ApiBody({ schema: { type: 'object', properties: { isActive: { type: 'boolean', example: false } } } })
   @ApiOkResponse({ description: 'Plan status updated successfully.' })
   @ApiForbiddenResponse({ description: 'User is not an Admin.' })
-  togglePlanStatus(@Param('id') id: string, @Body('isActive') isActive: boolean) {
-    return this.subscriptionsService.togglePlanStatus(id, isActive);
+  togglePlanStatus(
+    @GetUser('id') adminId: string,
+    @Param('id') id: string, 
+    @Body('isActive') isActive: boolean,
+  ) {
+    return this.subscriptionsService.togglePlanStatus(adminId, id, isActive);
   }
 
   @Get('admin/employers')
@@ -70,11 +81,11 @@ export class SubscriptionsController {
   }
 
   // ----------------------------------------------------
-  // EMPLOYER ROUTES (Rules 1, 2, 3)
+  // EMPLOYER ROUTES
   // ----------------------------------------------------
 
   @Get('plans')
-  @Roles(Role.EMPLOYER) // Admins could technically view this too if you adjust the roles
+  @Roles(Role.EMPLOYER)
   @ApiOperation({ summary: 'Get all active subscription plans available for purchase (Employers)' })
   @ApiOkResponse({ description: 'List of active plans retrieved successfully.' })
   getActivePlans() {

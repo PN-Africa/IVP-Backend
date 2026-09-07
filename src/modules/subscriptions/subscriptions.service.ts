@@ -4,39 +4,71 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 import { CreatePlanDto } from './dto/create-plan.dto';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AdminAuditService } from '../Admin/admin.service';
 
 @Injectable()
 export class SubscriptionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
-    private readonly notificationsService: NotificationsService
-) {}
+    private readonly notificationsService: NotificationsService,
+    private readonly auditService: AdminAuditService,
+  ) {}
 
   // ================= ADMIN RULES =================
 
   // Admin creates a plan
-  async createPlan(dto: CreatePlanDto) {
-    return this.prisma.subscriptionPlan.create({ data: dto });
+  async createPlan(adminId: string, dto: CreatePlanDto) {
+    const plan = await this.prisma.subscriptionPlan.create({ data: dto });
+
+    await this.auditService.logAction(
+      adminId,
+      'PLAN_CREATED',
+      'SUBSCRIPTION_PLAN',
+      plan.id,
+      { name: plan.name, price: plan.price, durationMonths: plan.durationMonths },
+    );
+
+    return plan;
   }
 
   // Admin edits a plan
-  async updatePlan(planId: string, dto: Partial<CreatePlanDto>) {
+  async updatePlan(adminId: string, planId: string, dto: Partial<CreatePlanDto>) {
     const plan = await this.prisma.subscriptionPlan.findUnique({ where: { id: planId } });
     if (!plan) throw new NotFoundException('Plan not found');
 
-    return this.prisma.subscriptionPlan.update({
+    const updatedPlan = await this.prisma.subscriptionPlan.update({
       where: { id: planId },
       data: dto,
     });
+
+    await this.auditService.logAction(
+      adminId,
+      'PLAN_UPDATED',
+      'SUBSCRIPTION_PLAN',
+      planId,
+      { updatedFields: Object.keys(dto) },
+    );
+
+    return updatedPlan;
   }
 
   // Admin activates/deactivates a plan
-  async togglePlanStatus(planId: string, isActive: boolean) {
-    return this.prisma.subscriptionPlan.update({
+  async togglePlanStatus(adminId: string, planId: string, isActive: boolean) {
+    const updatedPlan = await this.prisma.subscriptionPlan.update({
       where: { id: planId },
       data: { isActive },
     });
+
+    await this.auditService.logAction(
+      adminId,
+      'PLAN_STATUS_UPDATED',
+      'SUBSCRIPTION_PLAN',
+      planId,
+      { isActive },
+    );
+
+    return updatedPlan;
   }
 
   // Admin views all employer subscriptions globally
@@ -90,11 +122,21 @@ export class SubscriptionsService {
         endDate.setMonth(endDate.getMonth() + plan.durationMonths);
       }
 
-      return this.prisma.employerSubscription.update({
+      const updatedSub = await this.prisma.employerSubscription.update({
         where: { id: existingSub.id },
         data: { planId: plan.id, status: 'ACTIVE', startDate, endDate },
         include: { plan: true },
       });
+
+      await this.auditService.logAction(
+        userId,
+        'SUBSCRIPTION_UPDATED',
+        'EMPLOYER_SUBSCRIPTION',
+        updatedSub.id,
+        { planId: plan.id, planName: plan.name, startDate, endDate },
+      );
+
+      return updatedSub;
     }
 
     // (NEW PURCHASE): Create fresh record with calculated expiry
@@ -102,13 +144,13 @@ export class SubscriptionsService {
 
     this.notificationsService.createNotification({
       userId: employer.userId,
-      type: 'SUBSCRIPTION', // Or 'SYSTEM'
+      type: 'SUBSCRIPTION',
       title: 'Subscription Activated',
       description: `You have successfully subscribed to the ${plan.name} plan. 
                     Your subscription is active until ${endDate.toDateString()}.`,
     }).catch(err => console.error('Notification failed:', err));
     
-    return this.prisma.employerSubscription.create({
+    const newSub = await this.prisma.employerSubscription.create({
       data: {
         employerId: employer.id,
         planId: plan.id,
@@ -118,6 +160,16 @@ export class SubscriptionsService {
       },
       include: { plan: true },
     });
+
+    await this.auditService.logAction(
+      userId,
+      'SUBSCRIPTION_PURCHASED',
+      'EMPLOYER_SUBSCRIPTION',
+      newSub.id,
+      { planId: plan.id, planName: plan.name, startDate, endDate },
+    );
+
+    return newSub;
   }
 
   // Automated Background Check (Runs every day at midnight)
@@ -151,7 +203,7 @@ export class SubscriptionsService {
           sub.endDate
         ).catch(console.error);
 
-        // NEW: Send in-app notification for expiring subscription
+        // Send in-app notification for expiring subscription
         this.notificationsService.createNotification({
           userId: sub.employer.userId,
           type: 'SUBSCRIPTION',
@@ -162,7 +214,7 @@ export class SubscriptionsService {
       }
     }
 
-    //Mark subscriptions as EXPIRED if the date has passed
+    // Mark subscriptions as EXPIRED if the date has passed
     await this.prisma.employerSubscription.updateMany({
       where: {
         status: 'ACTIVE',
@@ -177,14 +229,12 @@ export class SubscriptionsService {
   // ================= USAGE TRACKING =================
 
   async getEmployerUsage(userId: string) {
-    // 1. Get the employer profile
     const employer = await this.prisma.employerProfile.findUnique({ 
       where: { userId } 
     });
     
     if (!employer) throw new NotFoundException('Employer profile not found');
 
-    // 2. Get the currently active subscription and its plan details
     const activeSub = await this.prisma.employerSubscription.findFirst({
       where: {
         employerId: employer.id,
@@ -194,7 +244,6 @@ export class SubscriptionsService {
       include: { plan: true },
     });
 
-    // If they don't have an active plan, return a default state
     if (!activeSub) {
       return {
         hasActivePlan: false,
@@ -202,18 +251,16 @@ export class SubscriptionsService {
       };
     }
 
-    // 3. Count how many jobs the employer posted during this billing cycle
     const jobsUsed = await this.prisma.job.count({
       where: {
         employerId: employer.id,
         createdAt: {
-          gte: activeSub.startDate, // Only count jobs created AFTER the plan started
+          gte: activeSub.startDate,
           lte: activeSub.endDate,
         },
       },
     });
 
-    // 4. Return the formatted data for your frontend progress bars
     return {
       hasActivePlan: true,
       planName: activeSub.plan.name,
@@ -236,26 +283,26 @@ export class SubscriptionsService {
   }
 
   async getCurrentSubscription(userId: string) {
-  const employer = await this.prisma.employerProfile.findUnique({ 
-    where: { userId } 
-  });
-  
-  if (!employer) throw new NotFoundException('Employer profile not found');
+    const employer = await this.prisma.employerProfile.findUnique({ 
+      where: { userId } 
+    });
+    
+    if (!employer) throw new NotFoundException('Employer profile not found');
 
-  const activeSub = await this.prisma.employerSubscription.findFirst({
-    where: {
-      employerId: employer.id,
-      status: 'ACTIVE',
-      endDate: { gt: new Date() },
-    },
-    include: { plan: true },
-    orderBy: { createdAt: 'desc' },
-  });
+    const activeSub = await this.prisma.employerSubscription.findFirst({
+      where: {
+        employerId: employer.id,
+        status: 'ACTIVE',
+        endDate: { gt: new Date() },
+      },
+      include: { plan: true },
+      orderBy: { createdAt: 'desc' },
+    });
 
-  if (!activeSub) {
-    throw new NotFoundException('No active subscription found');
+    if (!activeSub) {
+      throw new NotFoundException('No active subscription found');
+    }
+
+    return activeSub;
   }
-
-  return activeSub;
-}
 }

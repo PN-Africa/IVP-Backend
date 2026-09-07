@@ -105,31 +105,88 @@ export class AdminAuthService {
 }
 
 @Injectable()
+export class AdminAuditService {
+  constructor(private prisma: PrismaService) {}
+
+  // Internal method used by other services to record actions
+  async logAction(
+    adminId: string,
+    action: string,
+    entity: string,
+    entityId?: string,
+    details?: any,
+  ) {
+    return this.prisma.auditLog.create({
+      data: {
+        adminId,
+        action,
+        entity,
+        entityId,
+        details: details ? (details as Prisma.InputJsonValue) : undefined,
+      },
+    });
+  }
+
+  // Rule 1 & 5: View, search, and filter logs
+  async getLogs(filters: GetAuditLogsDto) {
+    const { search, action, entity, startDate, endDate, page = 1, limit = 20 } = filters;
+    const skip = (page - 1) * limit;
+
+    const whereClause: Prisma.AuditLogWhereInput = {
+      ...(action && { action: { equals: action, mode: 'insensitive' } }),
+      ...(entity && { entity: { equals: entity, mode: 'insensitive' } }),
+      ...(startDate && endDate && {
+        createdAt: {
+          gte: new Date(startDate),
+          lte: new Date(endDate),
+        },
+      }),
+      ...(search && {
+        OR: [
+          { action: { contains: search, mode: 'insensitive' } },
+          { entity: { contains: search, mode: 'insensitive' } },
+          { admin: { email: { contains: search, mode: 'insensitive' } } },
+        ],
+      }),
+    };
+
+    const [total, logs] = await Promise.all([
+      this.prisma.auditLog.count({ where: whereClause }),
+      this.prisma.auditLog.findMany({
+        where: whereClause,
+        include: {
+          admin: { // Rule 2: Include the user who performed the action
+            select: { id: true, email: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' }, // Latest first
+        skip,
+        take: limit,
+      }),
+    ]);
+
+    return {
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+      data: logs, // Rule 3 & 4 included in payload
+    };
+  }
+}
+
+
+@Injectable()
 export class AdminDashboardService {
   constructor(
     private prisma: PrismaService,
     private emailService: EmailService,
+    private auditService: AdminAuditService,
   ) {}
 
-  // Rule 11: Helper method for Audit Logging
-  private async logAdminAction(adminId: string, action: string, targetUserId: string, details?: string) {
-    try {
-      // NOTE: Ensure you have an AuditLog model in your Prisma schema. 
-      // If not, you can replace this with a standard console.log or your preferred logging service for now.
-      await this.prisma.auditLog.create({
-        data: {
-          adminId,
-          action,
-          targetUserId,
-          entity: 'USER', // <-- ADD THIS LINE (assuming this action targets a user)
-          details: details as any, // <-- ADD "as any" to bypass strict JSON type mismatch
-        }
-      });
-    } catch (error) {
-      console.error('Failed to write to audit log:', error);
-    }
-  }
-
+  
   // Rule 2 & 5: View all users and search by name, email, or role
   // Rules 1, 2, & 3: View, Search, and Filter all users
   async getAllUsers(filters: {
@@ -217,20 +274,27 @@ export class AdminDashboardService {
     return user;
   }
 
-  // Rules 5, 6, 7, 8: Update user status (Activate, Deactivate, Suspend) + Rule 11
   async updateUserStatus(adminId: string, userId: string, newStatus: AccountStatus) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user) throw new NotFoundException('User not found');
+  const user = await this.prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new NotFoundException('User not found');
 
-    const updatedUser = await this.prisma.user.update({
-      where: { id: userId },
-      data: { status: newStatus },
-      select: { id: true, email: true, status: true },
-    });
+  const updatedUser = await this.prisma.user.update({
+    where: { id: userId },
+    data: { status: newStatus },
+    select: { id: true, email: true, status: true },
+  });
 
-    await this.logAdminAction(adminId, `USER_STATUS_UPDATED`, userId, `Status changed to ${newStatus}`);
-    return updatedUser;
-  }
+  // Replaces the broken this.logAdminAction
+  await this.auditService.logAction(
+    adminId, 
+    'USER_STATUS_UPDATED', 
+    'USER', 
+    userId, 
+    { previousStatus: user.status, newStatus } 
+  );
+
+  return updatedUser;
+}
 
   // Rule 9: Resend verification email
   async resendVerificationEmail(adminId: string, userId: string) {
@@ -246,7 +310,7 @@ export class AdminDashboardService {
     });
 
     await this.emailService.sendVerificationEmail(user.email, verificationToken);
-    await this.logAdminAction(adminId, 'RESEND_VERIFICATION_EMAIL', userId);
+    await this.auditService.logAction(adminId, 'RESEND_VERIFICATION_EMAIL', 'USER', userId);
     
     return { message: 'Verification email resent successfully' };
   }
@@ -269,7 +333,7 @@ export class AdminDashboardService {
     });
 
     await this.emailService.sendPasswordResetEmail(user.email, resetToken);
-    await this.logAdminAction(adminId, 'INITIATED_PASSWORD_RESET', userId);
+    await this.auditService.logAction(adminId, 'INITIATED_PASSWORD_RESET', 'USER', userId);
 
     return { message: 'Password reset email sent to user' };
   }
@@ -280,6 +344,7 @@ export class AdminEmployerService {
   constructor(
     private prisma: PrismaService,
     private emailService: EmailService,
+    private auditService: AdminAuditService,
   ) {}
 
   // Rule 1 & 2: Review pending requests and view documents
@@ -295,7 +360,7 @@ export class AdminEmployerService {
   }
 
   // Rules 3, 4 & 5: Approve, Reject, and process rejection reason
-  async updateVerificationStatus(employerId: string, status: 'APPROVED' | 'REJECTED', rejectionReason?: string) {
+  async updateVerificationStatus(adminId: string, employerId: string, status: 'APPROVED' | 'REJECTED', rejectionReason?: string) {
     const employer = await this.prisma.employerProfile.findUnique({
       where: { id: employerId },
       include: { user: true },
@@ -303,21 +368,28 @@ export class AdminEmployerService {
 
     if (!employer) throw new NotFoundException('Employer not found');
 
-    // Update database (Make sure rejectionReason exists in Prisma EmployerProfile schema)
     const updatedEmployer = await this.prisma.employerProfile.update({
       where: { id: employerId },
       data: { 
         verificationStatus: status,
-        rejectionReason: status === 'REJECTED' ? rejectionReason : null, // Clear reason if approved
+        rejectionReason: status === 'REJECTED' ? rejectionReason : null,
       },
     });
 
-    // Rules 6 & 7: Send notification via Resend
     await this.emailService.sendEmployerVerificationStatusEmail(
       employer.user.email,
       employer.companyName, 
       status,
       rejectionReason
+    );
+
+    // Log the action
+    await this.auditService.logAction(
+      adminId,
+      status === 'APPROVED' ? 'EMPLOYER_APPROVED' : 'EMPLOYER_REJECTED',
+      'EMPLOYER_PROFILE',
+      employerId,
+      { companyName: employer.companyName, reason: rejectionReason }
     );
 
     return updatedEmployer;
@@ -395,7 +467,11 @@ export class DashboardService {
 
 @Injectable()
 export class AdminJobService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private auditService: AdminAuditService,
+    
+  ) {}
 
   // Rule 1: View all jobs
   // Rule 2: Search by title, company, or location
@@ -458,9 +534,17 @@ export class AdminJobService {
   // Rule 4: Approve job postings (status = PUBLISHED)
   // Rule 5: Hide inappropriate job postings (status = HIDDEN)
   // Rule 6: Close job postings (status = CLOSED)
-  async updateJobStatus(jobId: string, dto: UpdateJobStatusDto) {
+  async updateJobStatus(adminId: string, jobId: string, dto: UpdateJobStatusDto) {
     const job = await this.prisma.job.findUnique({ where: { id: jobId } });
     if (!job) throw new NotFoundException('Job posting not found');
+
+    await this.auditService.logAction(
+      adminId,
+      'JOB_STATUS_UPDATED',
+      'JOB',
+      jobId,
+      { newStatus: dto.status, title: job.title }
+    );
 
     return this.prisma.job.update({
       where: { id: jobId },
@@ -737,78 +821,6 @@ export class AdminContentService {
   }
 }
 
-@Injectable()
-export class AdminAuditService {
-  constructor(private prisma: PrismaService) {}
-
-  // Internal method used by other services to record actions
-  async logAction(
-    adminId: string,
-    action: string,
-    entity: string,
-    entityId?: string,
-    details?: any,
-  ) {
-    return this.prisma.auditLog.create({
-      data: {
-        adminId,
-        action,
-        entity,
-        entityId,
-        details: details ? (details as Prisma.InputJsonValue) : undefined,
-      },
-    });
-  }
-
-  // Rule 1 & 5: View, search, and filter logs
-  async getLogs(filters: GetAuditLogsDto) {
-    const { search, action, entity, startDate, endDate, page = 1, limit = 20 } = filters;
-    const skip = (page - 1) * limit;
-
-    const whereClause: Prisma.AuditLogWhereInput = {
-      ...(action && { action: { equals: action, mode: 'insensitive' } }),
-      ...(entity && { entity: { equals: entity, mode: 'insensitive' } }),
-      ...(startDate && endDate && {
-        createdAt: {
-          gte: new Date(startDate),
-          lte: new Date(endDate),
-        },
-      }),
-      ...(search && {
-        OR: [
-          { action: { contains: search, mode: 'insensitive' } },
-          { entity: { contains: search, mode: 'insensitive' } },
-          { admin: { email: { contains: search, mode: 'insensitive' } } },
-        ],
-      }),
-    };
-
-    const [total, logs] = await Promise.all([
-      this.prisma.auditLog.count({ where: whereClause }),
-      this.prisma.auditLog.findMany({
-        where: whereClause,
-        include: {
-          admin: { // Rule 2: Include the user who performed the action
-            select: { id: true, email: true },
-          },
-        },
-        orderBy: { createdAt: 'desc' }, // Latest first
-        skip,
-        take: limit,
-      }),
-    ]);
-
-    return {
-      meta: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-      data: logs, // Rule 3 & 4 included in payload
-    };
-  }
-}
 
 @Injectable()
 export class AdminNotificationService {

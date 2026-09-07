@@ -5,12 +5,13 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { AuthModule } from '../auth/auth.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { EmailModule } from '../email/email.module';
+import { AdminAuditService } from '../Admin/admin.service';
 
 
 @Module({
   imports: [PrismaModule, AuthModule, NotificationsModule, EmailModule],
   controllers: [JobsController, SavedJobsController],
-  providers: [JobsService, SavedJobsService],
-  exports: [JobsService, SavedJobsService],
+  providers: [JobsService, SavedJobsService, AdminAuditService],
+  exports: [JobsService, SavedJobsService, AdminAuditService],
 })
 export class JobsModule {}
