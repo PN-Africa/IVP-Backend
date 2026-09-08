@@ -46,7 +46,7 @@ export class TalentProfileController {
     @Body() dto: UpdatePersonalInfoDto,
     @UploadedFile() file?: Express.Multer.File
   ) {
-    return this.talentProfileService.updatePersonalInfo(req.user.userId, dto, file);
+    return this.talentProfileService.updatePersonalInfo(req.user.id, dto, file);
   }
 
   @Post('experience')
@@ -54,7 +54,7 @@ export class TalentProfileController {
   @ApiCreatedResponse({ description: 'Work experience entry added successfully.' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid JWT token.' })
   async addExperience(@Request() req, @Body() dto: AddExperienceDto) {
-    return this.talentProfileService.addExperience(req.user.userId, dto);
+    return this.talentProfileService.addExperience(req.user.id, dto);
   }
 
   @Post('education')
@@ -62,7 +62,7 @@ export class TalentProfileController {
   @ApiCreatedResponse({ description: 'Education entry added successfully.' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid JWT token.' })
   async addEducation(@Request() req, @Body() dto: AddEducationDto) {
-    return this.talentProfileService.addEducation(req.user.userId, dto);
+    return this.talentProfileService.addEducation(req.user.id, dto);
   }
 
   @Put('skills')
@@ -75,7 +75,7 @@ export class TalentProfileController {
     @Body() dto: UpdateSkillsDto,
     @UploadedFile() file?: Express.Multer.File
   ) {
-    return this.talentProfileService.updateSkills(req.user.userId, dto, file);
+    return this.talentProfileService.updateSkills(req.user.id, dto, file);
   }
 
   // Added Endpoint for Employment Preferences
@@ -84,6 +84,6 @@ export class TalentProfileController {
   @ApiOkResponse({ description: 'Employment preferences successfully updated.' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid JWT token.' })
   async updateEmploymentPreferences(@Request() req, @Body() dto: UpdateEmploymentPreferenceDto) {
-    return this.talentProfileService.updateEmploymentPreferences(req.user.userId, dto);
+    return this.talentProfileService.updateEmploymentPreferences(req.user.id, dto);
   }
 }
