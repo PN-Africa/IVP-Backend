@@ -88,6 +88,26 @@ export class JobsService {
     return updatedJob;
   }
 
+  async getJobById(jobId: string) {
+    const job = await this.prisma.job.findUnique({
+      where: { id: jobId },
+      include: {
+        employer: {
+          select: {
+            companyName: true,
+            logoUrl: true,
+          },
+        },
+      },
+    });
+
+    if (!job) {
+      throw new NotFoundException('Job not found');
+    }
+
+    return job;
+  }
+
   async closeJob(jobId: string, userId: string) {
     const job = await this.prisma.job.findUnique({ 
       where: { id: jobId },
