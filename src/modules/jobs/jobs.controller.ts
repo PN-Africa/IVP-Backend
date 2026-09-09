@@ -21,12 +21,21 @@ import { ScheduleInterviewDto } from './dto/schedule-interview.dto';
 import { FillJobDto } from './dto/fill-job.dto';
 import { ActiveSubscriptionGuard } from '../subscriptions/guards/active-subscription.guard';
 import { SearchJobsDto } from './dto/search-jobs.dto';
+import { ParseUUIDPipe } from '@nestjs/common';
 
 @ApiTags('Jobs')
 @ApiBearerAuth()
 @Controller('jobs')
 export class JobsController {
   constructor(private readonly jobsService: JobsService) {}
+
+  @Get('search')
+  @UsePipes(new ValidationPipe({ transform: true }))
+  @ApiOperation({ summary: 'Search and filter active jobs' })
+  @ApiOkResponse({ description: 'Returns a paginated list of matching jobs.' })
+  async searchJobs(@Query() query: SearchJobsDto) {
+    return this.jobsService.searchJobs(query);
+  }
 
   @Get('admin/filled-jobs')
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -36,6 +45,33 @@ export class JobsController {
   @ApiForbiddenResponse({ description: 'Only platform administrators can access this endpoint.' })
   getFilledJobsForAdmin() {
     return this.jobsService.getAdminFilledJobs();
+  }
+
+  @Get('my-postings')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.EMPLOYER)
+  @ApiOperation({ summary: 'Get all job postings created by the authenticated employer' })
+  @ApiOkResponse({ description: 'Employer job postings retrieved successfully.' })
+  getEmployerJobs(@GetUser('id') employerId: string) {
+    return this.jobsService.getEmployerJobs(employerId);
+  }
+
+  @Get('interviews')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.EMPLOYER)
+  @ApiOperation({ summary: 'Get all scheduled interviews for the authenticated employer' })
+  @ApiOkResponse({ description: 'List of interviews retrieved successfully.' })
+  getEmployerInterviews(@GetUser('id') employerId: string) {
+    return this.jobsService.getEmployerInterviews(employerId);
+  }
+
+  @Get('talent/interviews')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.TALENT) 
+  @ApiOperation({ summary: 'Get all scheduled interviews for the authenticated talent' })
+  @ApiOkResponse({ description: 'List of interviews retrieved successfully.' })
+  getTalentInterviews(@GetUser('id') userId: string) {
+    return this.jobsService.getTalentInterviews(userId);
   }
 
   @Post()
@@ -51,7 +87,7 @@ export class JobsController {
   @ApiOperation({ summary: 'Get a single job by ID' })
   @ApiParam({ name: 'id', description: 'The UUID of the job' })
   @ApiOkResponse({ description: 'Job retrieved successfully.' })
-  getJobById(@Param('id') id: string) {
+  getJobById(@Param('id', ParseUUIDPipe) id: string) {
     return this.jobsService.getJobById(id);
   }
 
@@ -109,14 +145,7 @@ export class JobsController {
     return this.jobsService.closeJob(jobId, employerId);
   }
 
-  @Get('my-postings')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.EMPLOYER)
-  @ApiOperation({ summary: 'Get all job postings created by the authenticated employer' })
-  @ApiOkResponse({ description: 'Employer job postings retrieved successfully.' })
-  getEmployerJobs(@GetUser('id') employerId: string) {
-    return this.jobsService.getEmployerJobs(employerId);
-  }
+  
 
   @Patch(':id/applicants/:applicationId/shortlist')
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -174,15 +203,6 @@ export class JobsController {
     return this.jobsService.scheduleInterview(jobId, applicationId, employerId, dto);
   }
 
-  @Get('interviews')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.EMPLOYER)
-  @ApiOperation({ summary: 'Get all scheduled interviews for the authenticated employer' })
-  @ApiOkResponse({ description: 'List of interviews retrieved successfully.' })
-  getEmployerInterviews(@GetUser('id') employerId: string) {
-    return this.jobsService.getEmployerInterviews(employerId);
-  }
-
   @Patch(':id/fill')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.EMPLOYER)
@@ -211,15 +231,6 @@ export class JobsController {
     return this.jobsService.updateInterview(interviewId, employerId, 'RESCHEDULE', dto);
   }
 
-  @Get('talent/interviews')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.TALENT) 
-  @ApiOperation({ summary: 'Get all scheduled interviews for the authenticated talent' })
-  @ApiOkResponse({ description: 'List of interviews retrieved successfully.' })
-  getTalentInterviews(@GetUser('id') userId: string) {
-    return this.jobsService.getTalentInterviews(userId);
-  }
-
   @Patch('interviews/:interviewId/cancel')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.EMPLOYER)
@@ -233,13 +244,7 @@ export class JobsController {
     return this.jobsService.updateInterview(interviewId, employerId, 'CANCEL');
   }
 
-  @Get('search')
-  @UsePipes(new ValidationPipe({ transform: true }))
-  @ApiOperation({ summary: 'Search and filter active jobs' })
-  @ApiOkResponse({ description: 'Returns a paginated list of matching jobs.' })
-  async searchJobs(@Query() query: SearchJobsDto) {
-    return this.jobsService.searchJobs(query);
-  }
+  
 }
 
 @ApiTags('Saved Jobs')

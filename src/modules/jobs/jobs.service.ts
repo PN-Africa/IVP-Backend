@@ -487,10 +487,29 @@ export class JobsService {
     }
 
     // Capture the updated job so it can be returned after logging
-    const updatedJob = await this.prisma.job.update({
+    const updatedJob = await this.prisma.$transaction(async (tx) => {
+    if (dto.applicationId) {
+      await tx.application.update({
+        where: { id: dto.applicationId },
+        data: { status: 'ACCEPTED' },
+      });
+    }
+
+    if (unsuccessfulApps.length > 0) {
+      await tx.application.updateMany({
+        where: { 
+          jobId, 
+          id: { not: dto.applicationId || '' } 
+        },
+        data: { status: 'REJECTED' },
+      });
+    }
+
+    return tx.job.update({
       where: { id: jobId },
       data: { status: 'FILLED' },
     });
+  });
 
     // --- ADDED AUDIT LOG ---
     await this.auditService.logAction(
@@ -517,6 +536,10 @@ export class JobsService {
   }
 
   async searchJobs(query: SearchJobsDto) {
+    const page = query.page || 1;
+    const limit = query.limit || 10;
+    const skip = (page - 1) * limit;
+
     const where: Prisma.JobWhereInput = {
       status: 'PUBLISHED',
       deadline: { gt: new Date() },
@@ -554,15 +577,18 @@ export class JobsService {
       [sortField]: sortOrder,
     };
 
-    const jobs = await this.prisma.job.findMany({
+    const [jobs, totalCount] = await Promise.all([
+    this.prisma.job.findMany({
       where,
       orderBy,
+      skip,
+      take: limit,
       include: {
-        employer: {
-          select: { companyName: true, logoUrl: true },
-        },
+        employer: { select: { companyName: true, logoUrl: true } },
       },
-    });
+    }),
+    this.prisma.job.count({ where })
+  ]);
 
     if (jobs.length === 0) {
       return {
@@ -572,10 +598,14 @@ export class JobsService {
     }
 
     return {
-      message: 'Jobs retrieved successfully.',
-      count: jobs.length,
-      data: jobs,
-    };
+    message: jobs.length ? 'Jobs retrieved successfully.' : 'No jobs found.',
+    meta: {
+      totalCount,
+      currentPage: page,
+      totalPages: Math.ceil(totalCount / limit),
+    },
+    data: jobs,
+  };
   }
 }
 
