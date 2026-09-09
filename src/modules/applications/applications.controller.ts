@@ -27,8 +27,8 @@ export class ApplicationsController {
     @Request() req: any, 
     @Param('jobId') jobId: string
   ) {
-    // req.user is populated by your JwtStrategy (contains userId, email, role)
-    const userId = req.user.userId; 
+    // req.user is populated by your JwtStrategy (contains id, email, role)
+    const userId = req.user.id; 
     
     return this.applicationsService.applyForJob(userId, jobId);
   }
@@ -37,6 +37,6 @@ export class ApplicationsController {
   @UseGuards(AuthGuard('jwt'))
   @Get('my-applications')
   async getMyApplications(@Request() req: any) {
-    return this.applicationsService.getMyApplications(req.user.userId);
+    return this.applicationsService.getMyApplications(req.user.id);
   }
 }
