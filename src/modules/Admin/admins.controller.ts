@@ -137,13 +137,12 @@ export class AdminEmployerController {
   async verifyEmployer(
     @Req() req,
     @Param('id') employerId: string,
-    @Param('id') id: string,
     @Body() verifyDto: VerifyEmployerDto
   ) {
 
-    const adminId = req.user.sub;
+    const adminId = req.user.id || req.user.sub;
     return this.adminEmployerService.updateVerificationStatus(
-      id, 
+      adminId, 
       employerId,
       verifyDto.status, 
       verifyDto.rejectionReason
