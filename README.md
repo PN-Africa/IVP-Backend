@@ -1,402 +1,82 @@
 # IVP Africa Backend
 
-## Overview
+A concise, up-to-date README for the IVP Africa backend service.
 
-This repository contains the backend API for the IVP Africa platform. It is built with NestJS, Prisma, and PostgreSQL. The application provides authentication, email verification, password recovery, employer profile management, job posting, subscription handling, payment flow, and messaging support.
+Overview
+- Backend: NestJS + TypeScript, using Prisma for PostgreSQL access.
+- Features: authentication (JWT), employer/talent profiles, job postings, applications, subscriptions, payments (webhooks), messaging, and admin utilities.
 
-## Tech Stack
+Quick links
+- API reference and full schema: [API-documentation.md](API-documentation.md)
 
-- NestJS
-- TypeScript
-- Prisma ORM
-- PostgreSQL
-- JWT authentication
-- Nodemailer for email delivery
-- Paystack-style webhook handling
-- Class-validator / ValidationPipe
+Requirements
+- Node.js 18+ (recommended), npm
+- PostgreSQL database
+- Environment variables configured (see section below)
 
-## Project Layout
-
-- `src/main.ts` — Application bootstrap, global prefix, validation pipe, and exception filter
-- `src/app.module.ts` — Root module importing feature modules
-- `src/app.controller.ts` — Root welcome route
-- `src/common/filters/http-exception.filter.ts` — Custom API error formatter
-- `src/modules/` — Feature modules and controllers
-  - `auth/` — Authentication, registration, login, email verification, password reset
-  - `payments/` — Payment initialization and webhook handling
-  - `jobs/` — Job creation, applicant management, interview and fill actions
-  - `subscriptions/` — Subscription plan creation and purchase flows
-  - `employer/` — Employer profile management
-  - `health/` — Health check endpoint
-  - `system/` — Database seeding utilities
-  - `messaging/` — Messaging and conversations
-  - `prisma/` — Prisma database integration
-  - `applications/` — Placeholder module
-  - `users/` — Placeholder module
-  - `talent/` — Talent profile and dashboard controller (not wired into `AppModule`)
-
-## Getting Started
-
-Install dependencies:
+Getting started (development)
+1. Install dependencies
 
 ```bash
 npm install
 ```
 
-Generate Prisma client (also runs automatically after install):
+2. Generate Prisma client
 
 ```bash
 npx prisma generate
 ```
 
-Run the app in development mode:
+3. Run the app (development)
 
 ```bash
 npm run start:dev
+
 ```
 
-Build for production:
+Production build
 
 ```bash
 npm run build
+npm run start
 ```
 
-Run tests:
-
-```bash
-npm test
-```
-
-## OpenAPI / Swagger
-
-This project exposes interactive OpenAPI docs powered by `@nestjs/swagger` and served via Swagger UI.
-
-- Swagger UI: `GET /api/docs` — browse endpoints and try requests.
-- OpenAPI JSON: available from the Swagger module (the UI fetches it automatically).
-
-To use locally:
-
-```bash
-npm install
-npm run start:dev
-# then open http://localhost:3000/api/docs
-```
-
-Notes:
-
-- Protected endpoints require providing a JWT via the Swagger "Authorize" button (use `Bearer <token>`).
-- If you change controller route prefixes, restart the server so Swagger regenerates the OpenAPI spec.
-
-
-## Environment Variables
-
-The application uses `dotenv` and requires the following variables:
-
-- `DATABASE_URL` — PostgreSQL connection string
-- `DIRECT_URL` — Direct database connection string used by Prisma migrations
-- `JWT_SECRET` — JWT signing secret
-- `PAYSTACK_SECRET_KEY` — Paystack webhook secret
-- `PAYSTACK_PUBLIC_KEY` — Paystack public key
-- `API_URL` — Public API URL used in email links
-- `SMTP_HOST` — SMTP server host
-- `SMTP_PORT` — SMTP server port
-- `SMTP_SECURE` — `true` or `false`
-- `SMTP_USER` — SMTP username
-- `SMTP_PASS` — SMTP password
-
-## Runtime Configuration
-
-`src/main.ts` applies a global API prefix and validation pipe:
-
-- `app.setGlobalPrefix('api/v1')`
-- `ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true })`
-- `HttpExceptionFilter` formats exceptions as JSON
-
-## Active Modules
-
-### Included in `AppModule`
-
-- `AuthModule`
-- `UsersModule` (empty placeholder)
-- `JobsModule`
-- `ApplicationsModule` (empty placeholder)
-- `PaymentsModule`
-- `EmployerModule`
-- `HealthModule`
-- `SystemModule`
-- `PrismaModule`
-- `SubscriptionsModule`
-- `MessagingModule`
-
-### Not wired into `AppModule`
-
-- `TalentController` exists under `src/modules/talent/`, but there is no `TalentModule` import in `AppModule`. As a result, talent routes are currently not registered.
-
-## Available Routes
-
-### Base URL
-
-`http://localhost:3000/api/v1`
-
-### Root Route
-
-- `GET /api/v1` — Returns a welcome payload from `AppController`
-
-### Authentication
-
-- `POST /api/v1/auth/register/talent`
-- `POST /api/v1/auth/register/employer`
-- `POST /api/v1/auth/login`
-- `POST /api/v1/auth/password-reset/request`
-- `GET /api/v1/auth/verify-email?token=<verification-token>`
-- `POST /api/v1/auth/password-reset/confirm`
-
-### Employer Profile
-
-- `GET /api/v1/employer/profile`
-- `PATCH /api/v1/employer/profile`
-
-### Jobs
-
-- `GET /api/v1/jobs/admin/filled-jobs`
-- `POST /api/v1/jobs`
-- `GET /api/v1/jobs/:id/applicants`
-- `PATCH /api/v1/jobs/:id/applicants/:applicationId/status`
-- `PATCH /api/v1/jobs/:id`
-- `PATCH /api/v1/jobs/:id/close`
-- `GET /api/v1/jobs/my-postings`
-- `PATCH /api/v1/jobs/:id/applicants/:applicationId/shortlist`
-- `PATCH /api/v1/jobs/:id/applicants/:applicationId/reject`
-- `POST /api/v1/jobs/:id/applicants/:applicationId/interview`
-- `PATCH /api/v1/jobs/:id/fill`
-- `PATCH /api/v1/jobs/interviews/:interviewId/reschedule`
-- `PATCH /api/v1/jobs/interviews/:interviewId/cancel`
-
-### Subscriptions
-
-- `POST /api/v1/subscriptions/admin/plans`
-- `PATCH /api/v1/subscriptions/admin/plans/:id`
-- `PATCH /api/v1/subscriptions/admin/plans/:id/status`
-- `GET /api/v1/subscriptions/admin/employers`
-- `GET /api/v1/subscriptions/plans`
-- `POST /api/v1/subscriptions/purchase/:planId`
-
-### Payments
-
-- `POST /api/v1/payments/initialize`
-- `POST /api/v1/payments/webhook`
-- `GET /api/v1/payments/history`
-
-### Messaging
-
-- `POST /api/v1/messaging/send`
-- `GET /api/v1/messaging/conversations`
-- `GET /api/v1/messaging/conversations/:id/messages`
-- `DELETE /api/v1/messaging/conversations/:id`
-
-### Health & System
-
-- `GET /api/v1/health`
-- `POST /api/v1/system/seed`
-
-## Important Notes
-
-- `PaymentsController` and `MessagingController` are annotated with `@Controller('api/v1/...')` in addition to the global prefix. This may cause route duplication at runtime (`/api/v1/api/v1/...`) unless the controller paths are adjusted.
-- `TalentController` declares routes under `@Controller('api/v1')` but is not registered through `AppModule`, so those routes are not currently active.
-- `UsersModule` and `ApplicationsModule` are imported by `AppModule` but currently contain no controllers or routes.
-- `SubscriptionsController` uses `JwtAuthGuard` and role guards, while `PaymentsController` uses `JwtAuthGuard` only for `initialize` and `history`.
-- `SystemController.seedDatabase()` is exposed as `POST /api/v1/system/seed`.
-
-## Database Schema Overview
-
-The Prisma schema defines core models such as:
-
-- `User`
-- `TalentProfile`
-- `EmployerProfile`
-- `Job`
-- `Application`
-- `SubscriptionPlan`
-- `Subscription`
-- `Payment`
-
-These models power user flows, job postings, subscriptions, and payment records.
-
-## Scripts
-
+Scripts
 - `npm run start` — Start NestJS in production mode
 - `npm run start:dev` — Start development server with watch mode
 - `npm run build` — Build the app
-- `npm run lint` — Run ESLint
+- `npm run lint` — Run ESLint and auto-fix
 - `npm test` — Run Jest tests
 
-## Maintenance Notes
+Environment variables (important)
+- `DATABASE_URL` — Postgres connection string used by the app
+- `DIRECT_URL` — Direct DB URL used by Prisma tools (optional)
+- `JWT_SECRET` — JWT signing secret
+- `API_URL` — Public API URL used in email links
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE` — Email delivery
+- `SUPABASE_URL`, `SUPABASE_KEY`, `SUPABASE_BUCKET` — File storage (uploads)
+- `PAYSTACK_PUBLIC_KEY`, `PAYSTACK_SECRET_KEY` — Payment provider credentials
 
-- Fix duplicate `api/v1` route declarations in controllers
-- Import or remove the `talent` module to match actual route availability
-- Add controllers for `UsersModule` and `ApplicationsModule` if those features are intended to be active
+API and documentation
+- The server applies a global prefix: `/api/v1` (see `src/main.ts`).
+- Interactive Swagger UI is available (when enabled) at `/api/docs` on the running server.
+- For a consolidated, human-readable API reference and the Prisma schema, see [API-documentation.md](API-documentation.md).
 
-### Example Request Bodies
+Important notes & maintenance
+- Some controllers use explicit `@Controller('api/v1/...')` in addition to the global prefix — this can produce duplicate routes like `/api/v1/api/v1/...`. Prefer relative controller prefixes and rely on the global prefix.
+- `Talent` routes may not be registered: the talent controller exists but the corresponding module is not imported into `AppModule`.
+- `UsersModule` and `ApplicationsModule` are currently placeholders and may require controllers if you intend to enable them.
 
-#### Talent Registration
+Database
+- The app uses Prisma; the full schema is included in `API-documentation.md` and `prisma/schema.prisma`.
 
-`POST /api/v1/auth/register/talent`
+Contributing & maintenance tips
+- Keep secrets out of version control — use environment variables or a secrets manager.
+- When adding routes that accept files, use Nest's `FileInterceptor` and `ParseFilePipeBuilder` to enforce size/type limits centrally.
+- After editing `prisma/schema.prisma`, run `npx prisma generate` and apply migrations as appropriate.
 
-```json
-{
-  "firstName": "Jane",
-  "lastName": "Doe",
-  "email": "jane@example.com",
-  "password": "StrongP@ssw0rd!",
-  "confirmPassword": "StrongP@ssw0rd!",
-  "acceptTerms": true
-}
-```
-
-#### Employer Registration
-
-`POST /api/v1/auth/register/employer`
-
-```json
-{
-  "companyName": "IVP Solutions",
-  "contactPerson": "John Doe",
-  "email": "hr@example.com",
-  "password": "StrongP@ssw0rd!",
-  "confirmPassword": "StrongP@ssw0rd!",
-  "industry": "Technology",
-  "companySize": "50-100",
-  "rcNumber": "RC123456",
-  "acceptTerms": true
-}
-```
-
-#### Login
-
-`POST /api/v1/auth/login`
-
-```json
-{
-  "email": "jane@example.com",
-  "password": "StrongP@ssw0rd!"
-}
-```
-
-#### Password Reset Request
-
-`POST /api/v1/auth/password-reset/request`
-
-```json
-{
-  "email": "jane@example.com"
-}
-```
-
-#### Confirm Password Reset
-
-`POST /api/v1/auth/password-reset/confirm`
-
-```json
-{
-  "token": "<reset-token>",
-  "newPassword": "NewStr0ngP@ss!"
-}
-```
-
-
-```json
-{
-  "message": "Password has been successfully reset. You can now log in with your new password."
-}
-```
-
-### Jobs Endpoint
-
-#### Create Job
-
-`POST /api/v1/jobs`
-
-Request body:
-
-```json
-{
-  "title": "Backend Engineer",
-  "description": "Build APIs for the IVP platform"
-}
-```
-
-Response:
-
-```json
-{
-  "message": "Job created successfully (Mocked)",
-  "jobId": "mock-uuid-9876",
-  "title": "Backend Engineer"
-}
-```
-
-> The jobs endpoint currently returns a mocked success response.
-
-### Payments and Webhooks
-
-#### Initialize Payment
-
-`POST /api/v1/payments/initialize`
-
-Request body:
-
-```json
-{
-  "email": "hr@example.com",
-  "amount": 199.99
-}
-```
-
-Response:
-
-```json
-{
-  "status": "success",
-  "checkoutUrl": "https://checkout.paystack.com/mock-session-code",
-  "reference": "IVP_REF_2026_<random>"
-}
-```
-
-#### Webhook Verification
-
-`POST /api/v1/payments/webhook`
-
-Headers:
-
-- `x-paystack-signature`: `<webhook-signature>`
-
-Request body example:
-
-```json
-{
-  "event": "charge.success",
-  "data": {
-    "reference": "IVP_REF_2026_12345",
-    "amount": 19999,
-    "status": "success"
-  }
-}
-```
-
-Response:
-
-```json
-{
-  "status": "received",
-  "message": "Webhook signature validated. Transaction reference IVP_REF_2026_12345 processed cleanly."
-}
-```
-
-#### Verify Payment Configuration
-
-`POST /api/v1/payments/verify-config`
-
-Response:
+Contact
+- For questions about this codebase, check the controllers in `src/modules/` and open an issue with reproduction steps.
 
 ```json
 {

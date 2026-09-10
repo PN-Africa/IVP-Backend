@@ -14,6 +14,8 @@ async function bootstrap() {
     'http://localhost:3000',
     'http://localhost:3001', // The port your frontend is currently using
     'http://localhost:7000',
+    'https://www.ivpafrica.site',
+    'https://ivpafrica.site',
     'https://ivp-africa-web.vercel.app',
     'https://ivp-africa-pn-africa.vercel.app',
     'https://ivp-africa.vercel.app', // Removed the trailing slash (crucial for CORS)

@@ -18,6 +18,24 @@ export class EmailService {
     );
   }
 
+  /**
+   * Register a new domain with Resend to send emails from custom domains
+   */
+  async createDomain(domainName: string) {
+    try {
+      const data = await this.resend.domains.create({
+        name: domainName,
+      });
+      console.log(`[Domain Created] ${domainName}:`, data);
+      return data;
+    } catch (error) {
+      console.error('Error creating domain in Resend:', error);
+      throw new InternalServerErrorException(
+        `Failed to create domain ${domainName} on Resend.`,
+      );
+    }
+  }
+
   async sendVerificationEmail(email: string, token: string) {
     
 
