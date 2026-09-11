@@ -39,7 +39,7 @@ export class EmailService {
   async sendVerificationEmail(email: string, token: string) {
     
 
-    const verifyUrl = `${process.env.API_URL}/api/v1/auth/verify-email?token=${token}`;
+    const verifyUrl = `${process.env.FRONTEND_URL}/VerifyEmailPage?token=${token}`;
 
     console.log(`[Email Attempt] Sending from: "${this.defaultFrom}" to: "${email}"`);
 
