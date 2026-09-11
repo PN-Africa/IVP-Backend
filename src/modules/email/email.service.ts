@@ -41,8 +41,10 @@ export class EmailService {
 
     const verifyUrl = `${process.env.API_URL}/api/v1/auth/verify-email?token=${token}`;
 
+    console.log(`[Email Attempt] Sending from: "${this.defaultFrom}" to: "${email}"`);
+
     try {
-      await this.resend.emails.send({
+      const response = await this.resend.emails.send({
         from: this.defaultFrom,
         to: email,
         subject: 'Verify Your IVP Africa Account',
@@ -57,8 +59,10 @@ export class EmailService {
           </div>
         `,
       });
+
+      console.log('[Resend Success Response]:', response);
     } catch (error) {
-      console.error('Error sending email:', error);
+      console.error('[Resend Error Detail]:', error);
       throw new InternalServerErrorException(
         'Registration succeeded, but email failed to send.',
       );
@@ -66,7 +70,7 @@ export class EmailService {
   }
 
   async sendPasswordResetEmail(email: string, token: string) {
-    const resetUrl = `${process.env.API_URL}/api/v1/auth/reset-password?token=${token}`;
+    const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${token}`;
 
     try {
       await this.resend.emails.send({
